@@ -1,0 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+body {
+  font-family: 'Inter', sans-serif;
+}
+
+.kpi-update {
+  animation: kpi-flash 0.4s ease-out;
+}
+
+@keyframes kpi-flash {
+  0% { opacity: 0.6; transform: scale(0.98); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.product-bar {
+  transition: width 0.5s ease-out;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@media (max-width: 768px) {
+  .tva-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

@@ -1,0 +1,12 @@
+const CONFIG = {
+  GOOGLE_API_KEY: 'AIzaSyBYx7lw7877fYQeRGq7vewvdvjj1e13C-w',
+  SPREADSHEET_ID: '1Rfz8wtPL6vOFWpKBII2j3zfVnss6AYvF_WP44bsHjoo',
+
+  SHEET_COMMANDES: 'Commandes',
+  SHEET_PRODUITS: 'Produits',
+  SHEET_TVA: 'Journal TVA',
+
+  REFRESH_INTERVAL: 15000,
+  TVA_MARGE_TAUX: 0.20,
+  DEVISE: '€',
+};

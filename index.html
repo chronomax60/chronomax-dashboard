@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChronoMax Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              blue: '#2563eb',
+              violet: '#7c3aed',
+              cyan: '#06b6d4',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
+
+  <!-- Header -->
+  <header class="bg-white shadow-sm border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+      <h1 class="text-xl font-bold text-brand-blue">ChronoMax Dashboard</h1>
+      <div class="flex items-center gap-2 text-sm text-gray-500">
+        <div class="pulse-dot"></div>
+        <span id="status-text">Connexion...</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+
+    <!-- Ligne 1 : 3 cartes KPI -->
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-4" id="kpi-section">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">CA du jour</p>
+        <p class="text-3xl font-bold text-brand-blue mt-2" id="kpi-ca">—</p>
+        <p class="text-sm mt-1" id="kpi-ca-evolution"></p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Marge moyenne</p>
+        <p class="text-3xl font-bold text-brand-violet mt-2" id="kpi-marge">—</p>
+        <p class="text-sm text-gray-400 mt-1">taux de marge du jour</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Commandes</p>
+        <p class="text-3xl font-bold text-brand-cyan mt-2" id="kpi-commandes">—</p>
+        <p class="text-sm text-gray-400 mt-1">aujourd'hui</p>
+      </div>
+    </section>
+
+    <!-- Ligne 2 : Top produits + Graphique évolution -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">Top Produits</h2>
+        <div id="top-produits" class="space-y-3">
+          <p class="text-gray-400 text-sm">Chargement...</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-700">Évolution CA</h2>
+          <div class="flex gap-1">
+            <button class="px-3 py-1 text-sm rounded-lg bg-brand-blue text-white" id="btn-semaine" onclick="setEvolutionPeriod('semaine')">Semaine</button>
+            <button class="px-3 py-1 text-sm rounded-lg bg-gray-100 text-gray-600" id="btn-mois" onclick="setEvolutionPeriod('mois')">Mois</button>
+          </div>
+        </div>
+        <div style="height: 250px;">
+          <canvas id="chart-evolution"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ligne 3 : Tableur TVA sur marge -->
+    <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+        <h2 class="text-lg font-semibold text-gray-700">TVA sur marge</h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="tva-mode" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm" onchange="onTvaModeChange()">
+            <option value="mois">Mois</option>
+            <option value="annee">Année</option>
+            <option value="libre">Période libre</option>
+          </select>
+          <select id="tva-mois" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"></select>
+          <select id="tva-annee" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"></select>
+          <input type="date" id="tva-date-debut" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm hidden">
+          <input type="date" id="tva-date-fin" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm hidden">
+          <button class="bg-brand-blue text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition" onclick="exportPDF()">
+            Exporter PDF
+          </button>
+        </div>
+      </div>
+      <div class="tva-table-wrapper">
+        <table class="w-full text-sm" id="tva-table">
+          <thead>
+            <tr class="border-b border-gray-200 text-left text-gray-500 uppercase text-xs tracking-wide">
+              <th class="py-2 pr-4">Date</th>
+              <th class="py-2 pr-4 text-right">CA HT</th>
+              <th class="py-2 pr-4 text-right">Coût total</th>
+              <th class="py-2 pr-4 text-right">Marge brute</th>
+              <th class="py-2 pr-4 text-right">TVA sur marge</th>
+              <th class="py-2 text-right">Marge nette</th>
+            </tr>
+          </thead>
+          <tbody id="tva-body">
+            <tr><td colspan="6" class="py-4 text-center text-gray-400">Chargement...</td></tr>
+          </tbody>
+          <tfoot id="tva-footer" class="border-t-2 border-gray-300 font-semibold">
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Scripts CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+  <!-- App modules -->
+  <script src="js/config.js"></script>
+  <script src="js/sheets-api.js"></script>
+  <script src="js/kpi.js"></script>
+  <script src="js/top-produits.js"></script>
+  <script src="js/evolution-chart.js"></script>
+  <script src="js/tva-marge.js"></script>
+  <script src="js/pdf-export.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
