@@ -184,10 +184,20 @@ async function buildAssistant() {
       messages: [{ role: 'system', content: systemPrompt }],
     },
     endCallFunctionEnabled: true,
+    voice: {
+      provider: process.env.VAPI_VOICE_PROVIDER || 'azure',
+      voiceId: process.env.VAPI_VOICE_ID || 'fr-FR-DeniseNeural',
+    },
     analysisPlan: {
-      summaryPrompt: "Résume l'appel en français. Si un rappel est nécessaire, commence par « À RAPPELER ». " +
-        "Indique ensuite : nom et numéro de rappel du client, appareil (marque et modèle), " +
-        "demande, et prix annoncé le cas échéant.",
+      summaryPlan: {
+        enabled: true,
+        messages: [
+          { role: 'system', content: "Tu résumes des appels téléphoniques reçus par la boutique ChronoMax, en français. " +
+            "Si un rappel est nécessaire, commence par « À RAPPELER ». Indique ensuite : nom et numéro de rappel " +
+            "du client, appareil (marque et modèle), demande, et prix annoncé le cas échéant. Sois bref." },
+          { role: 'user', content: 'Transcription de l\'appel :\n\n{{transcript}}' },
+        ],
+      },
     },
   };
 
@@ -203,26 +213,28 @@ async function buildAssistant() {
     }];
   }
 
-  if (process.env.VAPI_VOICE_PROVIDER && process.env.VAPI_VOICE_ID) {
-    assistant.voice = { provider: process.env.VAPI_VOICE_PROVIDER, voiceId: process.env.VAPI_VOICE_ID };
-  }
   return assistant;
 }
 
+// L'ID de l'assistant créé est gardé dans donnees/vapi.json (ce n'est pas un secret) :
+// les envois suivants mettent à jour Alice au lieu d'en créer une nouvelle.
+const VAPI_FILE = join(ROOT, 'donnees/vapi.json');
+
 async function pushToVapi(assistant) {
-  const { VAPI_API_KEY, VAPI_ASSISTANT_ID } = process.env;
+  const { VAPI_API_KEY } = process.env;
   if (!VAPI_API_KEY) throw new Error('VAPI_API_KEY manquant (voir .env.example).');
-  const url = VAPI_ASSISTANT_ID ? `${VAPI_API}/assistant/${VAPI_ASSISTANT_ID}` : `${VAPI_API}/assistant`;
-  const res = await fetch(url, {
-    method: VAPI_ASSISTANT_ID ? 'PATCH' : 'POST',
+  const saved = existsSync(VAPI_FILE) ? JSON.parse(await readFile(VAPI_FILE, 'utf8')) : {};
+  const id = process.env.VAPI_ASSISTANT_ID || saved.assistant_id;
+  const res = await fetch(id ? `${VAPI_API}/assistant/${id}` : `${VAPI_API}/assistant`, {
+    method: id ? 'PATCH' : 'POST',
     headers: { Authorization: `Bearer ${VAPI_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(assistant),
   });
   const body = await res.text();
   if (!res.ok) throw new Error(`Vapi : ${res.status} ${body}`);
-  const { id } = JSON.parse(body);
-  console.log(VAPI_ASSISTANT_ID ? `✅ Assistant ${id} mis à jour.`
-    : `✅ Assistant créé : ${id}\n   Ajoute VAPI_ASSISTANT_ID=${id} dans .env pour les prochaines mises à jour.`);
+  const result = JSON.parse(body);
+  if (!id) await writeFile(VAPI_FILE, JSON.stringify({ ...saved, assistant_id: result.id }, null, 2) + '\n');
+  console.log(id ? `✅ Alice mise à jour sur Vapi (${result.id}).` : `✅ Alice créée sur Vapi : ${result.id}`);
 }
 
 // --- Main -------------------------------------------------------------------
