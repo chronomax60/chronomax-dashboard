@@ -106,9 +106,8 @@ async function buildAssistant() {
   if (todo.length) console.warn(`⚠️  Il reste ${todo.join(' et ')} : à remplacer avant la mise en service.`);
 
   const assistant = {
-    name: `${entreprise.nom} – Accueil téléphonique`,
-    firstMessage: `Bonjour, ${entreprise.nom}, je suis l'assistant virtuel. ` +
-      `Cet appel peut être enregistré et retranscrit. Comment puis-je vous aider ?`,
+    name: `${entreprise.nom_assistant} – ${entreprise.nom}`,
+    firstMessage: entreprise.message_accueil,
     transcriber: { provider: 'deepgram', model: 'nova-2', language: 'fr' },
     model: {
       provider: process.env.VAPI_MODEL_PROVIDER || 'anthropic',
@@ -121,7 +120,7 @@ async function buildAssistant() {
           type: 'number',
           number: entreprise.numero_transfert,
           message: "Je vous mets en relation avec un conseiller, un instant s'il vous plaît.",
-          description: 'Conseiller ChronoMax : questions hors grille, SAV complexe, client mécontent.',
+          description: `${entreprise.responsable} (ChronoMax)` + ' : questions hors grille, SAV complexe, client mécontent.',
         }],
       }],
     },
