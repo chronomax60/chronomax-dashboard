@@ -1,0 +1,6 @@
+categorie,marque,modele,prestation,prix_ttc,delai,remarque
+EXEMPLE - Smartphone,Apple,iPhone 13,Remplacement écran,149,1 heure,Prix pièce compatible
+EXEMPLE - Smartphone,Apple,iPhone 13,Remplacement batterie,69,45 minutes,
+EXEMPLE - Smartphone,Samsung,Galaxy S22,Remplacement écran,189,24 heures,Sur commande de pièce
+EXEMPLE - Montre,Toutes,Toutes,Remplacement pile,15,Immédiat,
+EXEMPLE - Diagnostic,Toutes,Toutes,Diagnostic,0,24 heures,Gratuit si réparation acceptée
