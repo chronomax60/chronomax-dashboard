@@ -4,7 +4,8 @@ Assistant téléphonique qui :
 - répond aux clients en français ;
 - donne les **tarifs de réparation** à partir de ta grille (et rien d'autre) ;
 - répond aux questions **SAV / garantie** à partir de tes conditions ;
-- **transfère l'appel** vers ton numéro quand il ne connaît pas la réponse ;
+- quand elle ne connaît pas la réponse, **prend un message** (nom, numéro, appareil, demande) pour un rappel ;
+  un mode **transfert d'appel** existe aussi (`"mode_escalade": "transfert"` dans `donnees/entreprise.json`) ;
 - produit une **transcription et un résumé** de chaque appel.
 
 Plateforme téléphonique : [Vapi](https://vapi.ai). Elle gère le numéro, la voix et la transcription.
@@ -17,7 +18,7 @@ Ce dossier contient la configuration de l'assistant, sous forme de fichiers simp
 | **Tarifs iPhone** | Lus directement sur **chronomax.fr** (`api.chronomax.fr/api/telephones`). Un prix modifié sur le site est repris dès qu'on relance le script. |
 | **Adresse, horaires** | Lus sur chronomax.fr (`/api/settings`), avec une copie de secours dans `donnees/entreprise.json` |
 | **Conditions SAV / garanties** | `donnees/sav.md`. N'y mets que des informations vraies : pour le reste, Alice transfère. |
-| **Nom, message d'accueil, numéro de transfert** | `donnees/entreprise.json` |
+| **Nom, message d'accueil, mode message / transfert** | `donnees/entreprise.json` |
 | **Comportement d'Alice** | `prompt/system-prompt.md` |
 
 Pour élargir au-delà des iPhone, vide `TARIFS_FILTRE` dans `.env` (attention : le prompt dit aujourd'hui
@@ -33,8 +34,9 @@ Pour élargir au-delà des iPhone, vide `TARIFS_FILTRE` dans `.env` (attention :
 5. Envoyer à Vapi : `node scripts/build-assistant.mjs --push`.
    Au premier envoi, noter l'ID affiché dans `VAPI_ASSISTANT_ID`.
 6. Dans Vapi : choisir une **voix française**, acheter ou importer un **numéro**, puis le relier à l'assistant.
-7. **Tester en appelant** : demander un prix connu, un modèle inconnu (il doit transférer), une question de garantie.
-8. Mettre en place le **renvoi d'appel** de ton numéro pro vers le numéro Vapi (sur non-réponse, ou systématique).
+7. **Tester en appelant** : demander un prix connu, un modèle inconnu (Alice doit prendre un message), une question de garantie.
+8. Mettre en place le **renvoi d'appel** de ton numéro pro vers le numéro Vapi (sur non-réponse / occupé).
+   Le mode transfert vers ce même numéro créerait une boucle : il demande un **autre** numéro.
 
 Après chaque modification de tarifs sur le site : relancer l'étape 5.
 

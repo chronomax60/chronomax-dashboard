@@ -132,13 +132,42 @@ function render(template, vars) {
   });
 }
 
+const CAS_ESCALADE = `   - question sur un produit en vente (disponibilité, prix, accessoires, reprise) ;
+   - le modèle ou la prestation n'est pas dans la grille ;
+   - la réponse n'est pas dans les conditions SAV ;
+   - le client est mécontent, réclame un remboursement, ou demande à parler à quelqu'un ;
+   - tu as le moindre doute.`;
+
+// mode_escalade (entreprise.json) : « message » = Alice prend un message pour un rappel,
+// « transfert » = Alice transfère l'appel vers numero_transfert.
+function texteEscalade(e) {
+  if (e.mode_escalade === 'transfert') {
+    return `3. Transférer l'appel à un conseiller (outil de transfert) dans ces cas :
+${CAS_ESCALADE}
+   Avant de transférer, dis : « Je vous mets en relation avec un conseiller, un instant s'il vous plaît. »
+4. Si le transfert échoue ou si l'on est hors horaires : ${e.hors_horaires}
+   Rassure le client : ${e.responsable} et ses collègues étudieront sa demande à partir de la retranscription de l'appel.`;
+  }
+  return `3. Prendre un message pour que le client soit rappelé, dans ces cas :
+${CAS_ESCALADE}
+   Tu ne peux PAS transférer l'appel. Dis par exemple : « Je n'ai pas cette information, mais je note
+   votre demande : ${e.responsable} ou l'un de ses collègues vous rappellera. »
+   Puis demande, une question à la fois :
+   a. le nom du client ;
+   b. le numéro où le rappeler — répète-le chiffre par chiffre pour le faire confirmer ;
+   c. l'appareil concerné (marque et modèle) ;
+   d. sa demande, en une phrase.
+   Termine en résumant la demande et en précisant que le rappel se fera pendant les horaires
+   d'ouverture. Ne promets pas de délai de rappel précis.`;
+}
+
 async function buildAssistant() {
   const entreprise = JSON.parse(await readFile(join(ROOT, 'donnees/entreprise.json'), 'utf8'));
   Object.assign(entreprise, await loadInfosSite());
   const sav = (await readFile(join(ROOT, 'donnees/sav.md'), 'utf8')).replace(/<!--[\s\S]*?-->/g, '').trim();
   const tarifs = formatTarifs(await loadTarifs());
   const template = await readFile(join(ROOT, 'prompt/system-prompt.md'), 'utf8');
-  const systemPrompt = render(template, { ...entreprise, tarifs, sav });
+  const systemPrompt = render(template, { ...entreprise, tarifs, sav, escalade: texteEscalade(entreprise) });
 
   const todo = [systemPrompt.includes('À COMPLÉTER') && 'des champs « À COMPLÉTER »',
     systemPrompt.includes('EXEMPLE') && 'des tarifs « EXEMPLE »'].filter(Boolean);
@@ -153,22 +182,26 @@ async function buildAssistant() {
       model: process.env.VAPI_MODEL || 'claude-haiku-5-5',
       temperature: 0.2,
       messages: [{ role: 'system', content: systemPrompt }],
-      tools: [{
-        type: 'transferCall',
-        destinations: [{
-          type: 'number',
-          number: entreprise.numero_transfert,
-          message: "Je vous mets en relation avec un conseiller, un instant s'il vous plaît.",
-          description: `${entreprise.responsable} (ChronoMax)` + ' : questions hors grille, SAV complexe, client mécontent.',
-        }],
-      }],
     },
     endCallFunctionEnabled: true,
     analysisPlan: {
-      summaryPrompt: "Résume l'appel en français en 3 lignes : nom et numéro du client si donnés, " +
-        "appareil et demande, prix annoncé, et si l'appel a été transféré ou nécessite un rappel.",
+      summaryPrompt: "Résume l'appel en français. Si un rappel est nécessaire, commence par « À RAPPELER ». " +
+        "Indique ensuite : nom et numéro de rappel du client, appareil (marque et modèle), " +
+        "demande, et prix annoncé le cas échéant.",
     },
   };
+
+  if (entreprise.mode_escalade === 'transfert') {
+    assistant.model.tools = [{
+      type: 'transferCall',
+      destinations: [{
+        type: 'number',
+        number: entreprise.numero_transfert,
+        message: "Je vous mets en relation avec un conseiller, un instant s'il vous plaît.",
+        description: `${entreprise.responsable} (ChronoMax) : questions hors grille, SAV complexe, client mécontent.`,
+      }],
+    }];
+  }
 
   if (process.env.VAPI_VOICE_PROVIDER && process.env.VAPI_VOICE_ID) {
     assistant.voice = { provider: process.env.VAPI_VOICE_PROVIDER, voiceId: process.env.VAPI_VOICE_ID };
