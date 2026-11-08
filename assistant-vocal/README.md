@@ -10,24 +10,25 @@ Assistant téléphonique qui :
 Plateforme téléphonique : [Vapi](https://vapi.ai). Elle gère le numéro, la voix et la transcription.
 Ce dossier contient la configuration de l'assistant, sous forme de fichiers simples à modifier.
 
-## Ce que tu modifies
+## D'où viennent les informations
 
-| Fichier | Contenu |
+| Information | Source |
 |---|---|
-| `donnees/tarifs.csv` | La grille des tarifs : une ligne par prestation. Remplace les lignes `EXEMPLE`. |
-| `donnees/sav.md` | Tes conditions SAV, en phrases simples. |
-| `donnees/entreprise.json` | Nom, adresse, horaires, **numéro de transfert** (format `+336…`). |
-| `prompt/system-prompt.md` | Le comportement de l'assistant (en principe, pas besoin d'y toucher). |
+| **Tarifs iPhone** | Lus directement sur **chronomax.fr** (`api.chronomax.fr/api/telephones`). Un prix modifié sur le site est repris dès qu'on relance le script. |
+| **Adresse, horaires** | Lus sur chronomax.fr (`/api/settings`), avec une copie de secours dans `donnees/entreprise.json` |
+| **Conditions SAV / garanties** | `donnees/sav.md`. N'y mets que des informations vraies : pour le reste, Alice transfère. |
+| **Nom, message d'accueil, numéro de transfert** | `donnees/entreprise.json` |
+| **Comportement d'Alice** | `prompt/system-prompt.md` |
 
-> Au lieu de `tarifs.csv`, les tarifs peuvent venir d'un onglet **Tarifs** du Google Sheet
-> du dashboard, avec les mêmes colonnes : `categorie, marque, modele, prestation, prix_ttc, delai, remarque`.
-> Renseigne alors `GOOGLE_API_KEY` et `SPREADSHEET_ID` dans `.env`.
+Pour élargir au-delà des iPhone, vide `TARIFS_FILTRE` dans `.env` (attention : le prompt dit aujourd'hui
+« iPhone uniquement », il faudra l'adapter). `TARIFS_SOURCE=csv` ou `sheet` permet d'utiliser
+`donnees/tarifs.csv` ou un onglet « Tarifs » du Google Sheet à la place du site.
 
 ## Mise en service (étapes)
 
 1. **Créer un compte Vapi** et récupérer la clé API privée (Dashboard → API Keys).
 2. `cp .env.example .env` puis coller la clé dans `VAPI_API_KEY`.
-3. Remplir les fichiers de `donnees/`.
+3. Vérifier `donnees/sav.md` et `donnees/entreprise.json`.
 4. Générer et vérifier : `node scripts/build-assistant.mjs`, puis relire `dist/prompt.txt`.
 5. Envoyer à Vapi : `node scripts/build-assistant.mjs --push`.
    Au premier envoi, noter l'ID affiché dans `VAPI_ASSISTANT_ID`.
@@ -35,7 +36,7 @@ Ce dossier contient la configuration de l'assistant, sous forme de fichiers simp
 7. **Tester en appelant** : demander un prix connu, un modèle inconnu (il doit transférer), une question de garantie.
 8. Mettre en place le **renvoi d'appel** de ton numéro pro vers le numéro Vapi (sur non-réponse, ou systématique).
 
-Après chaque modification de tarifs : relancer l'étape 5.
+Après chaque modification de tarifs sur le site : relancer l'étape 5.
 
 ## À vérifier
 

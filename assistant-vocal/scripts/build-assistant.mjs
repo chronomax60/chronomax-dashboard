@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Construit la configuration de l'assistant vocal à partir des fichiers de
-// donnees/ (ou du Google Sheet), puis la crée / met à jour sur Vapi.
+// donnees/ et des tarifs publiés sur chronomax.fr, puis la crée / met à jour sur Vapi.
 //
 //   node scripts/build-assistant.mjs          -> génère dist/assistant.json (aucun envoi)
 //   node scripts/build-assistant.mjs --push   -> envoie la configuration à Vapi
@@ -46,44 +46,82 @@ function parseCsv(text) {
   return rows.filter(r => r.some(v => v.trim() !== ''));
 }
 
-async function loadTarifRows() {
-  const { GOOGLE_API_KEY, SPREADSHEET_ID, SHEET_TARIFS = 'Tarifs' } = process.env;
-  if (GOOGLE_API_KEY && SPREADSHEET_ID) {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}` +
-      `/values/${encodeURIComponent(SHEET_TARIFS)}?key=${GOOGLE_API_KEY}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Google Sheets : ${res.status} ${await res.text()}`);
-    console.log(`Tarifs lus depuis l'onglet « ${SHEET_TARIFS} » du Google Sheet.`);
-    return (await res.json()).values ?? [];
-  }
-  console.log('Tarifs lus depuis donnees/tarifs.csv.');
-  return parseCsv(await readFile(join(ROOT, 'donnees/tarifs.csv'), 'utf8'));
+const SITE_API = process.env.SITE_API || 'https://api.chronomax.fr';
+
+async function getJson(url) {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`${url} : ${res.status} ${await res.text()}`);
+  return res.json();
 }
 
-function formatTarifs(rows) {
-  const [header, ...lines] = rows;
-  if (!header || lines.length === 0) throw new Error('La grille des tarifs est vide.');
-  const cols = header.map(h => h.trim().toLowerCase());
-  const required = ['marque', 'modele', 'prestation', 'prix_ttc'];
-  const missing = required.filter(c => !cols.includes(c));
-  if (missing.length) throw new Error(`Colonnes manquantes dans la grille : ${missing.join(', ')}`);
+// Chaque tarif est normalisé en { modele, prestation, prix, delai, remarque }.
+async function loadTarifs() {
+  const source = (process.env.TARIFS_SOURCE || 'site').toLowerCase();
 
+  if (source === 'site') {
+    const filtre = (process.env.TARIFS_FILTRE ?? 'iphone').toLowerCase();
+    const all = await getJson(`${SITE_API}/api/telephones`);
+    const items = all
+      .filter(t => t.actif !== false)
+      .filter(t => !filtre || `${t.marque} ${t.modele}`.toLowerCase().includes(filtre))
+      .map(t => ({ modele: t.modele, prestation: t.panne, prix: t.prix }));
+    console.log(`Tarifs lus sur le site (${SITE_API}) : ${items.length} lignes` +
+      (filtre ? ` (filtre « ${filtre} »).` : '.'));
+    return items;
+  }
+
+  let rows;
+  if (source === 'sheet') {
+    const { GOOGLE_API_KEY, SPREADSHEET_ID, SHEET_TARIFS = 'Tarifs' } = process.env;
+    if (!GOOGLE_API_KEY || !SPREADSHEET_ID) throw new Error('GOOGLE_API_KEY et SPREADSHEET_ID requis.');
+    const data = await getJson(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}` +
+      `/values/${encodeURIComponent(SHEET_TARIFS)}?key=${GOOGLE_API_KEY}`);
+    rows = data.values ?? [];
+    console.log(`Tarifs lus depuis l'onglet « ${SHEET_TARIFS} » du Google Sheet.`);
+  } else {
+    rows = parseCsv(await readFile(join(ROOT, 'donnees/tarifs.csv'), 'utf8'));
+    console.log('Tarifs lus depuis donnees/tarifs.csv.');
+  }
+  const [header = [], ...lines] = rows;
+  const cols = header.map(h => h.trim().toLowerCase());
+  const missing = ['modele', 'prestation', 'prix_ttc'].filter(c => !cols.includes(c));
+  if (missing.length) throw new Error(`Colonnes manquantes dans la grille : ${missing.join(', ')}`);
   return lines.map(values => {
     const r = Object.fromEntries(cols.map((c, i) => [c, (values[i] ?? '').trim()]));
-    const prix = Number(String(r.prix_ttc).replace(',', '.').replace(/[^\d.]/g, ''));
-    if (r.prix_ttc === '' || Number.isNaN(prix)) {
-      throw new Error(`Prix invalide pour « ${r.marque} ${r.modele} – ${r.prestation} » : « ${r.prix_ttc} »`);
+    const modele = [r.marque, r.modele].filter(v => v && v.toLowerCase() !== 'toutes').join(' ') || 'Tous appareils';
+    return { modele, prestation: r.prestation, prix: r.prix_ttc, delai: r.delai, remarque: r.remarque };
+  });
+}
+
+// Une ligne par modèle : plus court à lire pour le modèle, donc des réponses plus rapides.
+function formatTarifs(items) {
+  if (items.length === 0) throw new Error('La grille des tarifs est vide.');
+  const parModele = new Map();
+  for (const t of items) {
+    const prix = Number(String(t.prix).replace(',', '.').replace(/[^\d.]/g, ''));
+    if (t.prix === '' || t.prix == null || Number.isNaN(prix)) {
+      throw new Error(`Prix invalide pour « ${t.modele} – ${t.prestation} » : « ${t.prix} »`);
     }
-    const parts = [
-      r.categorie && `[${r.categorie}]`,
-      [r.marque, r.modele].filter(v => v && v.toLowerCase() !== 'toutes').join(' ') || 'Tous appareils',
-      `– ${r.prestation} :`,
-      prix === 0 ? 'gratuit' : `${prix} € TTC`,
-      r.delai && `(délai : ${r.delai})`,
-      r.remarque && `— ${r.remarque}`,
-    ];
-    return '- ' + parts.filter(Boolean).join(' ');
-  }).join('\n');
+    const detail = [t.delai && `délai ${t.delai}`, t.remarque].filter(Boolean).join(', ');
+    const texte = `${t.prestation} ${prix === 0 ? 'gratuit' : `${prix} €`}${detail ? ` (${detail})` : ''}`;
+    if (!parModele.has(t.modele)) parModele.set(t.modele, []);
+    parModele.get(t.modele).push(texte);
+  }
+  return [...parModele].map(([modele, lignes]) => `- ${modele} : ${lignes.join(' ; ')}`).join('\n');
+}
+
+// Adresse, horaires et téléphone tels qu'affichés sur chronomax.fr.
+async function loadInfosSite() {
+  try {
+    const s = await getJson(`${SITE_API}/api/settings`);
+    return {
+      adresse: `${s.addressLine}, ${s.postalCode} ${s.city}`,
+      horaires: s.horaires.map(h => `${h.jour} : ${h.heures}`).join(' ; '),
+    };
+  } catch (err) {
+    console.warn(`⚠️  Infos du site indisponibles (${err.message}) : valeurs de entreprise.json utilisées.`);
+    return {};
+  }
 }
 
 // --- Assemblage -------------------------------------------------------------
@@ -96,8 +134,9 @@ function render(template, vars) {
 
 async function buildAssistant() {
   const entreprise = JSON.parse(await readFile(join(ROOT, 'donnees/entreprise.json'), 'utf8'));
+  Object.assign(entreprise, await loadInfosSite());
   const sav = (await readFile(join(ROOT, 'donnees/sav.md'), 'utf8')).replace(/<!--[\s\S]*?-->/g, '').trim();
-  const tarifs = formatTarifs(await loadTarifRows());
+  const tarifs = formatTarifs(await loadTarifs());
   const template = await readFile(join(ROOT, 'prompt/system-prompt.md'), 'utf8');
   const systemPrompt = render(template, { ...entreprise, tarifs, sav });
 
